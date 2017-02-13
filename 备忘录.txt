@@ -1,1 +1,14 @@
 2017 2-13
+
+github每次push都要输用户名密码的问题
+原因是用了https的方式，更改如下：
+在git bush下
+1. git remote -v 
+可以看到形如
+origin https://github.com/XXX(hub name)/YYY(repository name).git (fetch)
+origin https://github.com/XXX(hub name)/YYY(repository name).git (push)
+2. git rm origin
+移除了origin
+3. git remote add origin git@github.com:XXX/YYY.git
+添加了ssh式的origin
+4. git push origin 
