@@ -75,19 +75,16 @@ typedef boost::shared_ptr<sc_msg_def::jpk_spec_event_rank_t> sp_spec_event_rank_
 class sc_spec_event_rank_t : public sc_rank_list_t
 {
 public:
-    /* rank */
     sc_spec_event_rank_t();
     /* reward */
-    void update();
-    void inter_update();
     void unicast_spec_event_rank(int32_t uid_);
     int32_t get_rank(int32_t uid_);
     void get_ranking_list(int32_t &max_rank, int32_t *ranking_list_);
     void set_hosts(const vector<int32_t>& hostnums_) { m_hosts = hostnums_; }
+    void add_info(db_SpecEventUser_ext_t& db_, db_UserInfo_ext_t& user_db_);
 private:
-    uint32_t m_timestamp;
     string m_spec_event_rank_list_str;
-    list<sp_spec_event_rank_t> m_spec_event_rank_list;
+    unordered_map<int32_t, sp_spec_event_rank_t> m_spec_event_rank_list;
     vector<int32_t>  m_hosts;
 };
 #define spec_event_rank (singleton_t<sc_spec_event_rank_t>::instance())
@@ -95,8 +92,7 @@ private:
 typedef db_SpecEventUser_ext_t spec_event_user_t;
 typedef db_SpecEventUserPartner_ext_t spec_event_user_partner_t;
 typedef boost::shared_ptr<spec_event_user_t> sp_spec_event_user_t;
-typedef boost::shared_ptr<spec_event_user_partner_t> 
-        sp_spec_event_user_partner_t;
+typedef boost::shared_ptr<spec_event_user_partner_t> sp_spec_event_user_partner_t;
 class sc_spec_event_user_t
 {
 public:
@@ -115,15 +111,11 @@ public:
     int32_t reset();
     int32_t revive(sc_msg_def::req_spec_event_revive_t &jpk_,
                    sc_msg_def::ret_spec_event_revive_t &ret_);
-    void add_coin();
-    int on_coin_change(int32_t coin_);
-    void    get_enemy_team(sc_msg_def::jpk_spec_event_team_t &jpk_);
     int32_t get_enemy_info(sc_msg_def::ret_spec_event_round_enemy_t &ret_);
     void spec_event_sweep();
     int32_t next_round_end(sc_msg_def::ret_next_spec_event_t &ret_);
     int32_t set_first_enter();
 private:
-    int32_t consume_coin(int32_t coin_);
     void add_score(int32_t score_);
     void get_starnum(int32_t uid, int32_t pid, int32_t &rank);
     //void get_equip_level(int32_t uid, int32_t pid, int32_t &equiplv);
@@ -135,13 +127,6 @@ private:
 private:
     db_SpecEventUser_ext_t db;
     sc_user_t&             m_user;
-    //int32_t m_round; /* 当前关卡，默认1 */
-    //int32_t m_round_status; /* 当前关卡状态 */
-    //int32_t m_round_max; /* 历史通过的最高关卡 */
-    //int32_t m_reset_time; /* 重置次数 */
-    //int32_t m_anger;
-    //vector<int32_t> m_team;
-    //string m_enemy_view_data;
 };
 
 #endif

@@ -10,7 +10,7 @@
 
 #define LOG "SC_SPEC_EVENT"
 #define MAX_SPEC_EVENT_NUM 1000
-#define EVENT_POINT 16101
+#define EVENT_POINT 16102
 /* 关卡ID */
 #define SPEC_EVENT_ROUND_BEGIN 9001
 #define SPEC_EVENT_ROUND_END 9999
@@ -25,7 +25,7 @@
 #define SPEC_EVENT_REVIVE_ID 14
 #define SPEC_EVENT_COIN_TIMES 15
 /* 千名之外 */
-#define SPEC_EVENT_RANK_OUT_RANK 501
+#define SPEC_EVENT_RANK_OUT_RANK 1000
 
 /* sc_spec_event_t begin */
 sc_spec_event_t::sc_spec_event_t():
@@ -396,7 +396,6 @@ sc_spec_event_t::spec_event_end()
 	/* 活动结束发奖励 */
 	send_event_end_reward();
 	//TODO
-    logwarn((LOG, "spec_event_end get rank"));
     int32_t ranking_list[SPEC_EVENT_RANK_OUT_RANK];
     int32_t max_rank = 0;
     spec_event_rank.get_ranking_list(max_rank, ranking_list);
@@ -458,123 +457,63 @@ sc_spec_event_t::reset_user_info()
 
 /* sc_spec_event_rank_t begin */
 sc_spec_event_rank_t::sc_spec_event_rank_t():
-m_timestamp(0)
+sc_rank_list_t(SPEC_EVENT_RANK_OUT_RANK)
 {
-}
-
-bool
-spec_event_compare(sp_spec_event_rank_t a, sp_spec_event_rank_t b)
-{
-    if (a->score > b->score) {
-        return true;
-    }
-    if (a->score == b->score) {
-        if (a->uid > b->uid) {
-            return true;
-        } else {
-            return false;
-        }
-    }
-    return false;
-}
-
-void
-sc_spec_event_rank_t::update()
-{
-    /* 活动未开启且非第一次捞数据 */
-    if (!spec_event_s.isopen() && m_timestamp != 0) {
-        return;
-    }
-    inter_update();
-}
-
-void
-sc_spec_event_rank_t::inter_update()
-{
-    uint32_t cur_sec = date_helper.cur_sec();
-    /* 整点更新 客户端最多每一小时请求一次服务器数据 */
-    if (cur_sec % SPEC_EVENT_RANK_UPDATE_FREQUENCY == 0 || m_timestamp == 0) { 
-        m_timestamp = cur_sec;
-        sql_result_t res;
-        
-        string str_hosts;
-        for (int32_t host : m_hosts)
-        {
-            str_hosts.append(std::to_string(host)+",");
-        }
-        str_hosts = str_hosts.substr(0, str_hosts.length()-1);
-
-        char buf[1024];
-        /* 最多捞1,000条数据入内存 */
-        sprintf(buf, "SELECT ui.uid, nickname, grade, fp, ceu.score,viplevel from UserInfo ui "
-                     "LEFT JOIN SpecEventUser ceu ON ui.uid = ceu.uid "
-                     "WHERE ceu.score > 0 AND ui.hostnum in (%s) AND ceu.season = %d "
-                     "ORDER BY ceu.score DESC LIMIT 1000 ", 
-                str_hosts.c_str(), spec_event_s.latest_season());
-        db_service.sync_select(buf, res);
-        m_spec_event_rank_list.clear();
-        for (size_t i = 0; i < res.affect_row_num(); ++i) {
-            if (res.get_row_at(i) == NULL) {
-                logerror((LOG, "load spec event rank get_row_at is NULL!!, at:%lu", i));
-                break;
-            }
-            sp_spec_event_rank_t sp_spec_event_rank(
-                new sc_msg_def::jpk_spec_event_rank_t);
-            sql_result_row_t &row = *res.get_row_at(i);
-            sp_spec_event_rank->uid = (int)std::atoi(row[0].c_str());
-            sp_spec_event_rank->nickname = row[1];
-            sp_spec_event_rank->level = (int)std::atoi(row[2].c_str());
-            sp_spec_event_rank->fp = (int)std::atoi(row[3].c_str());
-            sp_spec_event_rank->score = (int)std::atoi(row[4].c_str());
-            sp_spec_event_rank->vip = (int)std::atoi(row[5].c_str());
-            m_spec_event_rank_list.push_back(sp_spec_event_rank);
-        }
-        if (!m_spec_event_rank_list.empty()) {
-            m_spec_event_rank_list.sort(spec_event_compare);
-        }
-    }
 }
 
 void
 sc_spec_event_rank_t::unicast_spec_event_rank(int32_t uid_)
 {
     sc_msg_def::ret_spec_event_rank_t ret;
-    auto it_list = m_spec_event_rank_list.begin();
-    for (size_t n = 0; it_list != m_spec_event_rank_list.end() && n < 100; ++n) {
-        ret.users.push_back(*(*it_list));
-        ++it_list;
+    ret.rank = this->find(uid_);
+    vector<int32_t>& rank_list = this->getList(100);
+    for (auto i=0; i<100; ++i)
+    {
+	    if (i+1 > rank_list.size())
+		    continue;
+	    auto it_list = m_spec_event_rank_list.find(rank_list[i]);
+	    if (it_list != m_spec_event_rank_list.end())
+	    {
+		    ret.users.push_back(*(*it_list));
+	    }
     }
-    ret.rank = get_rank(uid_);
     m_spec_event_rank_list_str.clear();
     ret >> m_spec_event_rank_list_str;
     logic.unicast(uid_, sc_msg_def::ret_spec_event_rank_t::cmd(),
                   m_spec_event_rank_list_str);
 }
 
-int32_t
-sc_spec_event_rank_t::get_rank(int32_t uid_)
-{
-    int32_t rank_ = 1;
-    for (auto it = m_spec_event_rank_list.begin(); 
-         it != m_spec_event_rank_list.end(); ++it, ++rank_)
-    {
-        if ((*it)->uid == uid_) {
-            return rank_;
-        }
-    }
-    return SPEC_EVENT_RANK_OUT_RANK;
-}
-
 void
 sc_spec_event_rank_t::get_ranking_list(int32_t &max_rank_, int32_t *ranking_list_)
 {
-    int32_t rank_ = 0;
-    for (auto it = m_spec_event_rank_list.begin();
-         it != m_spec_event_rank_list.end(); ++it, ++rank_)
+    vector<int32_t>& rank_list = this->getList();
+    max_rank_ = this->cur_size;
+    int32_t rank = 0
+    for (auto it=rank_list.begin(); it!=rank_list.end(); ++it, ++rank)
     {
-        ranking_list_[rank_ + 1] = (*it)->uid;
+        ranking_list_[rank + 1] = *it;
     }
-    max_rank_ = rank_;
+}
+
+void
+sc_spec_event_rank_t::add_info(db_SpecEventUser_ext_t& db_, db_UserInfo_ext_t& user_db_);
+{
+	sp_card_event_rank_t sp_card_event_rank(new sc_msg_def::jpk_card_event_rank_t);
+	auto it=m_card_event_rank_list.find(db_.uid);
+	bool is_insert = true;
+	if (it!=m_card_event_rank_list.end())
+	{
+		is_insert = false;
+		sp_card_event_rank = it->second;
+	}
+	sp_card_event_rank->uid = db_.uid;
+	sp_card_event_rank->nickname = user_db_.nickname();
+	sp_card_event_rank->level = user_db_.grade;
+	sp_card_event_rank->fp = user_db_.fp;
+	sp_card_event_rank->score = db_score;
+	sp_card_event_rank->vip = user_db_.viplevel;
+	if (is_insert)
+		m_card_event_rank_list.insert(make_pair(db_.uid, sp_card_event_rank));
 }
 /* sc_spec_event_rank_t end */
 
@@ -590,21 +529,10 @@ sc_spec_event_user_t::load_db()
     sql_result_t res;
     if (0 == db_SpecEventUser_t::sync_select_uid(m_user.db.uid, res)) {
         db.init(*res.get_row_at(0));
-        int season_id = spec_event_s.cur_season();
-        if (season_id > 0 && db.season != season_id)
-        {
-            if (db.score == db.coin)
-            {
-                db.season = season_id;
-                db_service.async_do((uint64_t)m_user.db.uid, [](db_SpecEventUser_t& db_) {
-                    db_.update();
-                }, db.data());
-            }
-            else
-            {
-                reset_user(season_id);
-            }
-        }
+	if (spec_event_rank.insert(db.uid, db.score))
+	{
+		spec_event_rank.add_info(db, m_user.db);
+	}
     } else {
         init_new_user();
     }
@@ -662,24 +590,11 @@ sc_spec_event_user_t::reset_user(int season_id)
     db.uid = m_user.db.uid;
     db.hostnum = m_user.db.hostnum;
     db.score = 0;
-    db.coin = 0;
     db.goal_level = 0;
     db.round = SPEC_EVENT_ROUND_BEGIN;
     db.round_status = SPEC_EVENT_ROUND_UNOPEN; /* 默认未开启关卡且未通关*/
     db.round_max = SPEC_EVENT_ROUND_BEGIN;
     db.reset_time = 0;
-    db.pid1 = -1;
-    db.pid2 = -1;
-    db.pid3 = -1;
-    db.pid4 = -1;
-    db.pid5 = -1;
-    db.anger = 0;
-    db.enemy_view_data = "";
-    db.hp1 = 1;
-    db.hp2 = 1;
-    db.hp3 = 1;
-    db.hp4 = 1;
-    db.hp5 = 1;
     db.difficult = 0;
     db.season = season_id;
     db.open_times = 0;
@@ -698,12 +613,11 @@ sc_spec_event_user_t::get_user_info(sc_msg_def::jpk_spec_event_t&
     jpk_.is_close = spec_event_s.isclose();
     jpk_.event_id = spec_event_s.get_event_id();
     jpk_.score = db.score;
-    jpk_.coin = db.coin;
     jpk_.round = db.round;
     jpk_.goal_level = db.goal_level;
     jpk_.round_status = db.round_status;
     jpk_.round_max = db.round_max;
-    jpk_.rank = spec_event_rank.get_rank(m_user.db.uid);
+    jpk_.rank = spec_event_rank.find(m_user.db.uid);
     jpk_.difficult = db.difficult;
     jpk_.open_times = db.open_times;
     jpk_.open_level = db.open_level;
@@ -713,77 +627,26 @@ sc_spec_event_user_t::get_user_info(sc_msg_def::jpk_spec_event_t&
     spec_event_s.getBeginEndDate(jpk_.begin_month, jpk_.begin_day, jpk_.begin_hour, jpk_.end_month, jpk_.end_day, jpk_.end_hour);
 }
 
-int32_t
-sc_spec_event_user_t::consume_coin(int32_t coin_)
-{
-    if (coin_ < 0) {
-        return ERROR_SC_CONSUME;
-    }
-    if (db.coin < coin_) {
-        return ERROR_SC_SPEC_EVENT_COIN_NOT_ENOUGH;
-    }
-    /* 做功能时道具和活动币未明确区分 */
-    db.set_coin(db.coin - coin_);
-    save_db();
-    sc_msg_def::nt_spec_event_coin_t nt;
-    nt.now = db.coin;
-    logic.unicast(m_user.db.uid, nt);
-    return SUCCESS;
-}
-
-void
-sc_spec_event_user_t::add_coin()
-{
-    if (!spec_event_s.isopen()) {
-        return;
-    }
-    uint32_t prob = repo_mgr.configure.find(SPEC_EVENT_DROP_PROBABILITY_ID)
-                                       ->second.value;
-    uint32_t rand_ = random_t::rand_integer(1, 10000);
-    if (rand_ > prob) {
-        return;
-    }
-    /* 做功能时道具和活动币未明确区分 后续改动后增加时只增加道具即可 */
-    /* 是道具 需要单独加个道具通知 */
-    sc_msg_def::nt_bag_change_t nt_bag;
-    m_user.item_mgr.addnew(SPEC_EVENT_COIN_ITEM_ID, 1, nt_bag);
-    m_user.item_mgr.on_bag_change(nt_bag);
-    save_db();
-    /* 需要单独加个道具掉落通知，有些冗余。。。 */
-    sc_msg_def::nt_spec_event_drop_coin_t nt_drop_coin;
-    nt_drop_coin.resid = SPEC_EVENT_COIN_ITEM_ID;
-    nt_drop_coin.num = 1;
-    logic.unicast(m_user.db.uid, nt_drop_coin);
-}
-
-int
-sc_spec_event_user_t::on_coin_change(int32_t coin_)
-{
-    if (coin_ == 0) {
-        return db.coin;
-    }
-    if (coin_ > 0) {
-        int n = repo_mgr.configure.find(SPEC_EVENT_COIN_TIMES)->second.value;
-        add_score(coin_ * n);
-    }
-    db.set_coin(db.coin + coin_);
-    if (db.coin < 0) {
-        db.set_coin(0);
-    }
-    sc_msg_def::nt_spec_event_coin_t nt;
-    nt.now = db.coin;
-    save_db();
-    logic.unicast(m_user.db.uid, nt);
-    return db.coin;
-}
-
 void
 sc_spec_event_user_t::add_score(int32_t score_)
 {
     if (score_ <= 0) {
         return;
     }
-    db.set_score(db.score + score_);
+    db.score += score_;
+    db.set_score(db.score);
+    if (spec_event_rank.find(db.uid) == -1)
+    {
+	    if (spec_event_rank.insert(db.uid, db.score))
+	    {
+		    spec_event_rank.add_info(db, m_user.db);
+	    }
+    }
+    else
+    {
+	    spec_event_rank.change(db.uid, db.score);
+	    spec_event_rank.add_info(db, m_user.db);
+    }
     save_db();
     int32_t goal_level = point_reward();
     sc_msg_def::nt_spec_event_score_t nt;
@@ -795,22 +658,6 @@ sc_spec_event_user_t::add_score(int32_t score_)
     sc_msg_def::nt_bag_change_t nt_p;
     m_user.item_mgr.addnew(EVENT_POINT, score_, nt_p);
     m_user.item_mgr.on_bag_change(nt_p);
-}
-
-void
-sc_spec_event_user_t::get_enemy_team(sc_msg_def::jpk_spec_event_team_t &jpk_)
-{
-    jpk_.anger = db.anger;
-    jpk_.actors[0].pid = db.pid1;
-    jpk_.actors[0].hp  = db.hp1;
-    jpk_.actors[1].pid = db.pid2;
-    jpk_.actors[1].hp  = db.hp2;
-    jpk_.actors[2].pid = db.pid3;
-    jpk_.actors[2].hp  = db.hp3;
-    jpk_.actors[3].pid = db.pid4;
-    jpk_.actors[3].hp  = db.hp4;
-    jpk_.actors[4].pid = db.pid5;
-    jpk_.actors[4].hp  = db.hp5;
 }
 
 int32_t
@@ -830,27 +677,19 @@ sc_spec_event_user_t::open(sc_msg_def::req_spec_event_open_round_t& jpk_,
     /* 每一阶层开启才消耗活动币 */
     if (jpk_.resid % 100 == 1 && db.round_status == SPEC_EVENT_ROUND_UNOPEN) {
         int difficult = (jpk_.resid % 1000) / 100 + 1;
-		/*
-        repo_def::spec_event_difficult_t *rp_difficult = repo_mgr.spec_event_difficult.get(difficult);
-        int consume = repo_mgr.spec_event_difficult.find(difficult)->second.open_cost; 
-        code = consume_coin(consume);
-		*/
-        if (SUCCESS == code)
-        {
-            db.open_times++;
-            db.set_open_times(db.open_times);
-            open_reward();
-            db.set_next_count(0);
-            sc_msg_def::nt_spec_event_open_t nt;
-            nt.open_times = db.open_times;
-            nt.open_level = db.open_level;
-            nt.next_count = db.next_count;
-            logic.unicast(m_user.db.uid, nt);
-        }
-		else
-		{
-			return code;
-		}
+        db.open_times++;
+        db.set_open_times(db.open_times);
+        open_reward();
+        db.set_next_count(0);
+        sc_msg_def::nt_spec_event_open_t nt;
+        nt.open_times = db.open_times;
+        nt.open_level = db.open_level;
+        nt.next_count = db.next_count;
+        logic.unicast(m_user.db.uid, nt);
+    }
+    else
+    {
+	return code;
     }
     string view_data;
 
@@ -1223,11 +1062,6 @@ sc_spec_event_user_t::reset()
     db.set_reset_time(db.reset_time + 1);
     db.set_round(SPEC_EVENT_ROUND_BEGIN);
     db.set_round_status(SPEC_EVENT_ROUND_UNOPEN);
-    db.set_hp1(1.0);
-    db.set_hp2(1.0);
-    db.set_hp3(1.0);
-    db.set_hp4(1.0);
-    db.set_hp5(1.0);
     save_db();
     
     return SUCCESS;
