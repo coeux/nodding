@@ -1,0 +1,41 @@
+打包：
+	1,..\publish\tool\run.bat
+	2,勾选common
+	3，打完，..publish\pkg
+	整包：
+		1，FilePacker新建一个package.pkg
+		2，将 publish\pkg\0.6.99\Files所有资源拖到FilePacker里面，然后保存
+		3，将versionUpdate_merge，language，versionUpdate.lua，package.pkg这四个文件放到安卓(assit)或ios资源文件下
+		4，clean一下，run as
+
+
+国服打包（鲁越电脑）：E:\NiceShot
+	版本更新文件（1服）:
+		内网：/data/nice/niceshot-master/sertool/VersionFile/inner.lua
+		线上：/data/nice/niceshot-master/sertool/VersionFile/online.lua
+国服新服：
+1，server-3/daemon.sh添加服
+2，up.php添加服
+3，数据库nice/nice_gmtool/host添加
+国服更新及合服：
+1，crontab 关闭
+2，up.php更改state = 1
+3，./restart-online.sh close
+4，提交表，各个服拉表
+5，合服，up.php,godssenki/online.lua修改，跑下server6的一个testarena的脚本，server-3/daemon.sh删除合并的服
+7，crontab起服务器
+8，更新文件online.lua修改
+9，up.php更改开服
+
+日服测试服：
+	D:\niceshot_ceshi
+	服务器放包位置（2服）/home/ec2-user/mater-nice/gameadm/CESHIPKG
+	版本更新文件（1服）/home/ec2-user/mater-nice/sertool/VersionFile/ceshionline.lua
+日服正式服：
+	E:\niceshot_fanti
+	服务器放包位置（2服）/home/ec2-user/mater-nice/gameadm/PKG
+	版本更新文件（1服）:
+		内网：/home/ec2-user/mater-nice/sertool/VersionFile/inner.lua
+		线上：/home/ec2-user/mater-nice/sertool/VersionFile/online.lua
+
+
